@@ -16,6 +16,8 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(cookie()); // Use cookie parser middleware to handle cookies
+app.use(express.urlencoded({ extended: true })); // For parsing application/x-www-form-urlencoded
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@fullstack-ecom.ys6u3vh.mongodb.net/?retryWrites=true&w=majority&appName=fullstack-ecom`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -36,14 +38,59 @@ async function run() {
     const productsCollection = client
       .db("fullstack-ecom")
       .collection("products");
+    const usersCollection = client.db("fullstack-ecom").collection("users");
 
     // prodcts api
+
+    const verifyJwt = (req, res, next) => {
+      const token = req.cookies["jwt-token"];
+      console.log("JWT Token:", token);
+
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        req.user = decoded;
+        next();
+      });
+    }; // middleware for JWT verification
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.user.email;
+      console.log("User from admin:", email);
+      if (!email) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      // Check if the user is an admin
+      // isAdmin = true or role:admin
+      const query = { email: email };
+      const userdb = usersCollection.findOne(query);
+      const user = await userdb;
+      console.log("User from admin query:", user);
+
+      if (!user) {
+        return res.status(404).json({ error: "user not found" });
+      }
+      let isAdmin;
+      console.log(isAdmin, "is admin");
+      if (user) {
+        console.log("checking user", user);
+        isAdmin = user.isAdmin;
+      }
+
+      if (!isAdmin) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      next();
+    }; // middleware for admin verification
 
     app.post("/jwt", async (req, res) => {
       try {
         const { email } = req.body;
         // const email = "rafiqcoder@gmail.com"; // Ensure email is passed in the request body
-        console.log("Generating JWT for email:", email);
+        // console.log("Generating JWT for email:", email);
 
         if (!email) {
           return res.status(400).json({ error: "Email is required" });
@@ -70,9 +117,13 @@ async function run() {
       res.json({ message: "Logged out successfully" });
     });
 
-    app.post("/products", async (req, res) => {
+    /// Products API
+
+    app.post("/products", verifyJwt, verifyAdmin, async (req, res) => {
       try {
         const product = req.body;
+        console.log("Adding product:", product);
+
         const result = await productsCollection.insertOne(product);
         res.status(201).json({
           status: "success",
@@ -153,8 +204,12 @@ async function run() {
       try {
         // const token = req.headers.authorization.split(" ")[1];
         const id = req.params.id;
+        console.log("Deleting product with ID:", id);
+
         const filter = { _id: new ObjectId(id) };
         const result = await productsCollection.deleteOne(filter);
+        console.log("Delete result:", result);
+        
         if (result.deletedCount === 1) {
           res.status(200).json({
             status: "success",
@@ -172,6 +227,68 @@ async function run() {
         res.status(500).json({
           status: "error",
           message: "Failed to delete product",
+          error: error.message,
+        });
+      }
+    });
+
+    // usersApi API
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+        const result = await usersCollection.insertOne(user);
+        res.status(201).json({
+          status: "success",
+          message: "User added successfully",
+          data: result,
+        });
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({
+          status: "error",
+          message: "Failed to add user",
+          error: error.message,
+        });
+      }
+    });
+    app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email: email };
+        const userdb = usersCollection.find(query);
+        const users = await userdb.toArray();
+        res.send({
+          status: "success",
+          message: "Users fetched successfully",
+          data: users,
+        });
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({
+          status: "error",
+          message: "Failed to fetch users",
+          error: error.message,
+        });
+      }
+    });
+    // check isAdmin API
+    app.post("/users/admin/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        console.log("Checking admin status for email:", email);
+
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        if (user && user.isAdmin) {
+          res.status(200).json({ isAdmin: true });
+        } else {
+          res.status(200).json({ isAdmin: false });
+        }
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({
+          status: "error",
+          message: "Failed to check admin status",
           error: error.message,
         });
       }
