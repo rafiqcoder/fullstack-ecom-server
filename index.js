@@ -1,15 +1,21 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const cookie = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 const app = express();
 const dotenv = require("dotenv");
 dotenv.config();
+
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Your frontend URL
+    credentials: true,
+  })
+);
 app.use(express.json());
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@fullstack-ecom.ys6u3vh.mongodb.net/?retryWrites=true&w=majority&appName=fullstack-ecom`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -34,16 +40,34 @@ async function run() {
     // prodcts api
 
     app.post("/jwt", async (req, res) => {
-      const email = req.body;
+      try {
+        const { email } = req.body;
+        // const email = "rafiqcoder@gmail.com"; // Ensure email is passed in the request body
+        console.log("Generating JWT for email:", email);
 
-      const token = jwt.sign(
-        {
-          data: email,
-        },
-        "secret",
-        { expiresIn: "1h" }
-      );
-      res.send({ token });
+        if (!email) {
+          return res.status(400).json({ error: "Email is required" });
+        }
+        const token = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, {
+          expiresIn: "1h",
+        });
+        res.cookie("jwt-token", token, {
+          httpOnly: true,
+          secure: false, // Set to true if using HTTPS
+        });
+        res.status(200).json({ success: true });
+      } catch (error) {
+        console.error("Error generating JWT:", error);
+        res.status(500).json({ error: "Failed to generate JWT" });
+      }
+    });
+    app.post("/logout", (req, res) => {
+      res.clearCookie("jwt-token", {
+        httpOnly: true,
+        secure: false,
+      });
+
+      res.json({ message: "Logged out successfully" });
     });
 
     app.post("/products", async (req, res) => {
@@ -127,6 +151,7 @@ async function run() {
 
     app.delete("/products/:id", async (req, res) => {
       try {
+        // const token = req.headers.authorization.split(" ")[1];
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
         const result = await productsCollection.deleteOne(filter);
