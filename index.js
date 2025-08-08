@@ -161,43 +161,43 @@ async function run() {
       // product update api
       //put
       //patch  filter, options, document, update
-      app.patch("/products/:id", async (req, res) => {
-        try {
-          const id = req.params.id;
-          const filter = { _id: new ObjectId(id) };
-          const options = { upsert: true };
-          const data = req.body;
-          const updateData = {
-            $set: {
-              name: data.name,
-              price: data.price,
-              stock: data.quantity,
-              description: data.description,
-              image: data.image,
-            },
-          };
-
-          const result = await productsCollection.updateOne(
-            filter,
-            updateData,
-            options
-          );
-          res.status(200).json({
-            status: "success",
-            message: "Product updated successfully",
-            data: result,
-          });
-        } catch (error) {
-          console.log(error);
-          res.status(500).json({
-            status: "error",
-            message: "Failed to update product",
-            error: error.message,
-          });
-        }
-      });
     });
+    app.patch("/products/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const data = req.body;
+        const updateData = {
+          $set: {
+            name: data.name,
+            price: data.price,
+            stock: data.quantity,
+            description: data.description,
+            image: data.image,
+          },
+        };
 
+        const result = await productsCollection.updateOne(
+          filter,
+          updateData,
+          options
+        );
+        console.log("Update result:", result);
+        res.status(200).json({
+          status: "success",
+          message: "Product updated successfully",
+          data: result,
+        });
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({
+          status: "error",
+          message: "Failed to update product",
+          error: error.message,
+        });
+      }
+    });
     // product delete api
 
     app.delete("/products/:id", async (req, res) => {
@@ -209,7 +209,7 @@ async function run() {
         const filter = { _id: new ObjectId(id) };
         const result = await productsCollection.deleteOne(filter);
         console.log("Delete result:", result);
-        
+
         if (result.deletedCount === 1) {
           res.status(200).json({
             status: "success",
